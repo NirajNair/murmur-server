@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package inference;
+
+option go_package = "murmur/go-server/gen/go/inference";
+option csharp_namespace = "Inference";
+
+// The core service for AI inference tasks.
+service InferenceService {
+  // Unary APIs
+  // Transcribes a full audio file.
+  rpc TranscribeAudio(AudioRequest) returns (TextResponse);
+  // Formats a piece of text.
+  rpc FormatText(TextRequest) returns (TextResponse);
+  // A combined RPC that transcribes and then formats the text.
+  rpc TranscribeAndFix(AudioRequest) returns (TextResponse);
+
+  // Streaming API for real-time transcription
+  // Transcribes audio chunks as they are received.
+  rpc StreamTranscription(stream AudioChunk) returns (stream TextChunk);
+}
+
+// ====== Messages ======
+
+// Request for a unary audio transcription.
+message AudioRequest {
+  // Raw audio data in PCM format.
+  bytes audio_pcm = 1;
+}
+
+// Request for text formatting.
+message TextRequest {
+  // The text to be formatted.
+  string text = 1;
+}
+
+// Response containing the processed text.
+message TextResponse {
+  // The resulting text.
+  string text = 1;
+}
+
+// A chunk of audio for streaming transcription.
+message AudioChunk {
+  // Raw audio data in PCM format.
+  bytes audio_pcm = 1;
+}
+
+// A chunk of transcribed text from the streaming API.
+message TextChunk {
+  // The transcribed text so far. This could be a partial result.
+  string partial_text = 1;
+  // A flag indicating if this is the final chunk for the stream.
+  bool is_final = 2;
+}
