@@ -1,61 +1,71 @@
 package handlers
 
 import (
-	"context"
-	"encoding/base64"
+	"io"
 	"log"
-	"time"
-
 	pb "murmur/go-server/gen/go/inference"
 
 	"github.com/gofiber/fiber/v2"
 )
 
-type APIRequest struct {
-	Audio string `json:"audio"`
-}
-
-type APIResponse struct {
-	RawText   string `json:"raw_text"`
-	FinalText string `json:"final_text"`
-}
-
-func TranscribeHandler(client pb.InferenceServiceClient) fiber.Handler {
+func TranscribeHandler(grpcClient pb.InferenceServiceClient) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		if c.Method() != fiber.MethodPost {
-			return c.Status(fiber.StatusMethodNotAllowed).SendString("Only POST method is allowed")
+			return c.Status(fiber.StatusMethodNotAllowed).JSON(fiber.Map{"error": "Only POST method is allowed"})
 		}
 
-		var req APIRequest
-		if err := c.BodyParser(&req); err != nil {
-			log.Printf("Error parsing request body: %v", err)
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
-		}
+		log.Println("Transcribe endpoint hit")
 
-		audioBytes, err := base64.StdEncoding.DecodeString(req.Audio)
+		grpcStream, err := grpcClient.TranscribeStream(c.Context())
 		if err != nil {
-			log.Printf("Error decoding base64 audio: %v", err)
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid base64 audio data"})
+			log.Printf("Failed to start gRPC stream: %v", err)
+			return internalServerError(c)
 		}
 
-		ctx, cancel := context.WithTimeout(c.Context(), 10*time.Second)
-		defer cancel()
+		buffer := make([]byte, 32*1024)
 
-		gRPCReq := &pb.AudioRequest{
-			AudioPcm: audioBytes,
-		}
-
-		gRPCRes, err := client.TranscribeAndFix(ctx, gRPCReq)
+		fileHeader, err := c.FormFile("audio")
 		if err != nil {
-			log.Printf("gRPC call failed: %v", err)
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to perform inference"})
+			log.Printf("Error getting audio file from form: %v", err)
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "audio file not found in form"})
 		}
 
-		apiRes := APIResponse{
-			RawText:   gRPCRes.GetText(),
-			FinalText: gRPCRes.GetText(),
+		audioFile, err := fileHeader.Open()
+		if err != nil {
+			log.Printf("Error opening audio file: %v", err)
+			return internalServerError(c)
+		}
+		defer audioFile.Close()
+
+		for {
+			n, err := audioFile.Read(buffer)
+			if n > 0 {
+				if err := grpcStream.Send(&pb.AudioChunk{AudioBytes: buffer[:n]}); err != nil {
+					log.Printf("Error sending audio chunk: %v", err)
+					return internalServerError(c)
+				}
+			}
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				log.Printf("Error reading audio file: %v", err)
+				return internalServerError(c)
+			}
 		}
 
-		return c.Status(fiber.StatusOK).JSON(apiRes)
+		response, err := grpcStream.CloseAndRecv()
+		if err != nil {
+			log.Printf("Error receiving response from gRPC stream: %v", err)
+			return internalServerError(c)
+		}
+
+		log.Printf("Response: %v", response.GetText())
+
+		return c.JSON(fiber.Map{"transcribed_text": response.GetText()})
 	}
+}
+
+func internalServerError(c *fiber.Ctx) error {
+	return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "It's not you, it's us. We are facing some issue, please try again later."})
 }
