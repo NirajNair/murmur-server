@@ -26,5 +26,5 @@ func main() {
 	app.Use(cors.New())
 	router.SetupRoutes(app, inferenceClient)
 	log.Printf("Fiber API server listening on :8080")
-	log.Fatal(app.Listen(":8080"))
+	log.Fatal(app.Listen("0.0.0.0:8080"))
 }
