@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"io"
 	"log"
 	pb "murmur/go-server/gen/go/inference"
@@ -10,35 +11,15 @@ import (
 
 func TranscribeHandler(grpcClient pb.InferenceServiceClient) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		if c.Method() != fiber.MethodPost {
-			return c.Status(fiber.StatusMethodNotAllowed).JSON(fiber.Map{"error": "Only POST method is allowed"})
-		}
-
-		log.Println("Transcribe endpoint hit")
-
-		grpcStream, err := grpcClient.TranscribeStream(c.Context())
+		grpcStream, err := grpcClient.TranscribeAndFix(c.Context())
 		if err != nil {
 			log.Printf("Failed to start gRPC stream: %v", err)
 			return internalServerError(c)
 		}
-
 		buffer := make([]byte, 32*1024)
-
-		fileHeader, err := c.FormFile("audio")
-		if err != nil {
-			log.Printf("Error getting audio file from form: %v", err)
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "audio file not found in form"})
-		}
-
-		audioFile, err := fileHeader.Open()
-		if err != nil {
-			log.Printf("Error opening audio file: %v", err)
-			return internalServerError(c)
-		}
-		defer audioFile.Close()
-
+		audioReader := bytes.NewReader(c.Body())
 		for {
-			n, err := audioFile.Read(buffer)
+			n, err := audioReader.Read(buffer)
 			if n > 0 {
 				if err := grpcStream.Send(&pb.AudioChunk{AudioBytes: buffer[:n]}); err != nil {
 					log.Printf("Error sending audio chunk: %v", err)
@@ -49,20 +30,16 @@ func TranscribeHandler(grpcClient pb.InferenceServiceClient) fiber.Handler {
 				break
 			}
 			if err != nil {
-				log.Printf("Error reading audio file: %v", err)
+				log.Printf("Error reading audio data: %v", err)
 				return internalServerError(c)
 			}
 		}
-
 		response, err := grpcStream.CloseAndRecv()
 		if err != nil {
 			log.Printf("Error receiving response from gRPC stream: %v", err)
 			return internalServerError(c)
 		}
-
-		log.Printf("Response: %v", response.GetText())
-
-		return c.JSON(fiber.Map{"transcribed_text": response.GetText()})
+		return c.JSON(fiber.Map{"transcription": response.GetText()})
 	}
 }
 

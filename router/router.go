@@ -7,8 +7,8 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-func SetupRoutes(app *fiber.App, inferenceClient pb.InferenceServiceClient) {
-	api := app.Group("/api")
+func SetupRoutes(app *fiber.App, inferenceGrpcClient pb.InferenceServiceClient) {
+	api := app.Group("/api/v1")
 
-	api.Post("/transcribe", handlers.TranscribeHandler(inferenceClient))
+	api.Post("/transcribe", handlers.TranscribeHandler(inferenceGrpcClient))
 }
