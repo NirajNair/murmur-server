@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"murmur/go-server/config"
 	pb "murmur/go-server/gen/go/inference"
 	"murmur/go-server/router"
 
@@ -11,20 +12,17 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-const (
-	gRPCServerAddress = "localhost:50051"
-)
-
 func main() {
-	conn, err := grpc.NewClient(gRPCServerAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	cfg := config.Load()
+	conn, err := grpc.NewClient(cfg.InferenceServiceGRPCUrl, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Fatalf("did not connect: %v", err)
+		log.Fatalf("Could not connect to Inference Service GRPC server: %v", err)
 	}
 	defer conn.Close()
 	inferenceClient := pb.NewInferenceServiceClient(conn)
 	app := fiber.New()
 	app.Use(cors.New())
 	router.SetupRoutes(app, inferenceClient)
-	log.Printf("Fiber API server listening on :8080")
-	log.Fatal(app.Listen("0.0.0.0:8080"))
+	log.Printf("Fiber API server listening on %s", cfg.GetHTTPAddress())
+	log.Fatal(app.Listen(cfg.GetHTTPAddress()))
 }
