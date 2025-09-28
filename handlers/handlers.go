@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"log"
+	"murmur/go-server/config"
 	pb "murmur/go-server/gen/go/inference"
 
 	"github.com/gofiber/fiber/v2"
@@ -11,12 +12,13 @@ import (
 
 func TranscribeHandler(grpcClient pb.InferenceServiceClient) fiber.Handler {
 	return func(c *fiber.Ctx) error {
+		cfg := config.GetInstance()
 		grpcStream, err := grpcClient.TranscribeAndFix(c.Context())
 		if err != nil {
 			log.Printf("Failed to start gRPC stream: %v", err)
 			return internalServerError(c)
 		}
-		buffer := make([]byte, 32*1024)
+		buffer := make([]byte, cfg.AudioBufferSizeInKb*1024)
 		audioReader := bytes.NewReader(c.Body())
 		for {
 			n, err := audioReader.Read(buffer)
