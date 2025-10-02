@@ -1,9 +1,20 @@
 # Builder Stage
 FROM golang:1.24.2-alpine AS builder
-RUN apk add --no-cache git ca-certificates
+RUN apk add --no-cache git ca-certificates protobuf-dev
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download && go mod verify
+RUN go install \
+    google.golang.org/protobuf/cmd/protoc-gen-go@latest \
+    google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+ENV PATH="/go/bin:${PATH}"
+COPY /protos ./protos
+RUN protoc --go_out=. --go_opt=module=murmur/go-server \
+           --go-grpc_out=. --go-grpc_opt=module=murmur/go-server \
+           protos/inference.proto
+
+RUN go mod tidy
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix static -o main .
 
