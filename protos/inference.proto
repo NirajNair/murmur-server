@@ -3,7 +3,6 @@ syntax = "proto3";
 package inference;
 
 option go_package = "murmur/go-server/gen/go/inference";
-option python_package = "server.gen";
 
 service InferenceService {
   rpc TranscribeStream(stream AudioChunk) returns (TextResponse);
