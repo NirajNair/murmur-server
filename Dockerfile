@@ -4,9 +4,8 @@ RUN apk add --no-cache git ca-certificates protobuf-dev
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download && go mod verify
-RUN go install \
-    google.golang.org/protobuf/cmd/protoc-gen-go@latest \
-    google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+RUN go install google.golang.org/protobuf/cmd/protoc-gen-go@latest \
+    && go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 
 ENV PATH="/go/bin:${PATH}"
 COPY /protos ./protos

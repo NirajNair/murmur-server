@@ -13,11 +13,18 @@ clean:
 deps:
 	go mod download
 
-run-docker:
-	docker-compose up -d
+build-image:
+	docker build -t murmur-server:latest .
+	slim build --target murmur-server:latest --tag murmur-server:slim --continue-after 10
+	docker rmi murmur-server:latest
+	
+start-container:
+	docker compose up -d
+	
+stop-container:
+	docker compose down
 
-stop-docker:
-	docker-compose down
+restart-container: stop-container start-container
 
 test:
 	go test ./...
